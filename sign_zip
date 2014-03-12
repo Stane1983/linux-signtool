@@ -1,0 +1,192 @@
+#!/bin/sh
+
+# No of arguments passed
+ARGS_COUNT=$#
+
+# Get paths
+DIR="$( cd "$( dirname "$0" )" && pwd )"
+SCRIPTNAME="$(basename $0)"
+PATH_JAR="$DIR/signapk.jar"
+PATH_PEM="$DIR/testkey.x509.pem"
+PATH_PK8="$DIR/testkey.pk8"
+
+showHeader() {
+	echo " "
+	echo "###############################"
+	echo "# Linux SignTool by Stane1983 #"
+	echo "###############################"
+	echo " "
+}
+
+showHelp() {
+	echo "Usage:"
+	echo " "
+	echo "   $SCRIPTNAME [install] <zip_or_apk_file> [backup]"
+	echo " "
+	echo "   install              - Add $SCRIPTNAME to your PATH"
+	echo "   zip_or_apk_file      - File that you want to sign"
+	echo "   backup               - if specified, backup of existing file"
+	echo "                          will be created."
+	echo " "
+}
+
+doInstall() {
+	exists=$(echo "$PATH"|grep -q $DIR && echo "yes")
+	if [ "$exists" = "yes" ] ; then
+		echo "Script is already in your path!"
+		echo " "
+		echo "Exiting..."
+		echo " "
+	else
+		echo "This will add $SCRIPTNAME to your PATH environment variable."
+		while true; do
+			read -p "Do you want to add script path to your environment variable (y/n)? " yn
+			case $yn in
+				[Yy]* )
+					echo "export PATH=\$PATH:$DIR" > ~/.bashrc
+					export PATH=$PATH:$DIR
+					echo "Script sucessfully installed! Please restart your terminal."
+					break;;
+				[Nn]* ) break;;
+			esac
+		done
+	fi
+	echo " "
+	exit 0
+}
+
+# Function will show error messages if some of files missing
+# and will return 0 which is interpreted as False
+checkFiles() {
+	if [ ! -f $PATH_JAR -o ! -f $PATH_PEM -o ! -f $PATH_PK8 ] ; then
+		echo "Error: Some of files are missing. Please check these files:"
+		echo "$PATH_JAR"
+		echo "$PATH_PEM"
+		echo "$PATH_PK8"
+		echo " "
+		echo "Exiting..."
+		echo " "
+		return 1
+	else
+		return 0
+	fi
+}
+
+isJavaInstalled() {
+	if type -p java; then
+		return 0
+	elif [[ -n "$JAVA_HOME" ]] && [[ -x "$JAVA_HOME/bin/java" ]];  then
+		return 0
+	else
+		return 1
+	fi
+}
+
+isZipInstalled() {
+	if type -p zip; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+removeOldSignatures() {
+	full_path=$1
+	
+	echo -n "Deleting old signature files from archive... "
+	zip -d "$full_path" META-INF/CERT.RSA >/dev/null 2>&1
+	zip -d "$full_path" META-INF/CERT.SF >/dev/null 2>&1
+	zip -d "$full_path" META-INF/MANIFEST.MF >/dev/null 2>&1
+	echo "done"
+}
+
+doSign() {
+	provided_file="$1"
+	make_backup=$2
+	
+	# Local variables
+	file_path="`dirname \"$provided_file\"`"
+	file_path="`( cd \"$file_path\" && pwd )`"
+	file_name=$(basename $provided_file)
+	
+	if [ "$make_backup" = "1" ]; then
+		echo -n "Making backup of $file_name... "
+		timestamp=$(date +%Y%m%d%H%M%S)
+		cp $provided_file "$timestamp"_"$file_name"
+		echo "done"
+	fi
+	
+	mv "$provided_file" "$provided_file"_unsigned
+	removeOldSignatures "$provided_file"_unsigned
+	echo -n "Signing $file_name... "
+	java -Xmx1536m -jar $PATH_JAR -w $PATH_PEM $PATH_PK8 "$provided_file"_unsigned "$provided_file"
+	rm -f "$provided_file"_unsigned
+	echo "done"
+	echo " "
+}
+
+showHeader
+
+# Check if Java is installed
+if [ ! isJavaInstalled ] ; then
+	echo "You have no Java installed on your machine!"
+	echo "Java is required for signing ZIP and APK files."
+	echo " "
+	echo "Exiting..."
+	echo " "
+	exit 1
+fi
+
+# Check if zip is installed
+if [ ! isZipInstalled ] ; then
+	echo "You have no zip command tool installed on your machine!"
+	echo "It is required component for this tool to work."
+	echo " "
+	echo "Exiting..."
+	echo " "
+	exit 1
+fi
+
+# Check for arguments, if none show help message
+if [ "$ARGS_COUNT" = "0" ] ; then
+	showHelp
+else
+	# Check if user called script with "install" parameter
+	if [ "$1" = "install" ]; then
+		doInstall
+	fi
+
+	# We have some arguments, now check if we have 1, 2 or more.
+	# Max 2 arguments are accepted, everything else is an error.
+	# Argument 1 can be only existing filename and argument 2
+	# which is optional can be 
+	
+	if [ "$ARGS_COUNT" = "1" -o "$ARGS_COUNT" = "2" ]; then
+		# First argument is always file, check if file exists
+		FILE_NAME="`basename \"$1\"`"
+		FILE_PATH="`dirname \"$1\"`"
+		FILE_PATH="`( cd \"$MY_PATH\" && pwd )`"
+		if [ ! -f "$FILE_PATH/$FILE_NAME" ]; then
+			echo "Error: File does not exist."
+			echo "Provided file: $FILE_PATH/$FILE_NAME"
+			echo " "
+			echo "Exiting..."
+			echo " "
+			exit 1
+		fi
+		
+		if [ "$ARGS_COUNT" = "2" ]; then
+			if [ "$2" = "backup" ]; then
+				doSign "$FILE_PATH/$FILE_NAME" 1
+			else
+				echo "Invalid argument."
+				echo " "
+				showHelp
+				exit 1
+			fi
+		else
+			doSign "$FILE_PATH/$FILE_NAME" 0
+		fi
+	fi
+fi
+

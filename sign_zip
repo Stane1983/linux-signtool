@@ -43,7 +43,7 @@ doInstall() {
 			read -p "Do you want to add script path to your environment variable (y/n)? " yn
 			case $yn in
 				[Yy]* )
-					echo "export PATH=\$PATH:$DIR" > ~/.bashrc
+					echo "export PATH=\$PATH:$DIR" >> ~/.bashrc
 					export PATH=$PATH:$DIR
 					echo "Script sucessfully installed! Please restart your terminal."
 					break;;

@@ -5,6 +5,7 @@ ARGS_COUNT=$#
 
 # Get paths
 DIR="$( cd "$( dirname "$0" )" && pwd )"
+CURR_DIR="$(pwd)"
 SCRIPTNAME="$(basename $0)"
 PATH_JAR="$DIR/signapk.jar"
 PATH_PEM="$DIR/testkey.x509.pem"
@@ -31,6 +32,15 @@ showHelp() {
 }
 
 doInstall() {
+	# Check if install procedure is started from script's directory
+	if [ "$DIR" != "$CURR_DIR" ] ; then
+		echo "You did not run script install procedure from it's base directory!"
+		echo " "
+		echo "Exiting..."
+		echo " "
+		exit 1
+	fi
+
 	exists=$(echo "$PATH"|grep -q $DIR && echo "yes")
 	if [ "$exists" = "yes" ] ; then
 		echo "Script is already in your path!"
